@@ -8,6 +8,7 @@ import re
 import pandas as pd
 import numpy as np
 
+from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import  GridSearchCV
@@ -15,8 +16,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 from sklearn.neural_network import MLPClassifier
-
-
 from sklearn.metrics import accuracy_score, precision_score, f1_score, confusion_matrix
 
 from scipy.fft import fft
@@ -62,11 +61,11 @@ import seaborn as sns
 
 
 
-acier_usure_75_75 = r".\Experimentations\Fraisage\Acier\Contrôle d'usure\Avec lubrifiant\40_2022_01_12_134028_75%_75%_L_US.xlsx"
-acier_simp_75_75 = r".\Experimentations\Fraisage\Acier\Avec lubrifiant\19_2022_01_10_155909_75%_75%_L.xlsx"
+acier_usure_75_75 = "Experimentations/40_2022_01_12_134028_75%_75%_L_US.xlsx"
+acier_simp_75_75 = "Experimentations/19_2022_01_10_155909_75%_75%_L.xlsx"
 
-acier_usure_120_100 = r".\Experimentations\Fraisage\Acier\Contrôle d'usure\Avec lubrifiant\39_2022_01_12_132408_120%_100%_L_US.xlsx"
-acier_simp_120_100 = r".\Experimentations\Fraisage\Acier\Avec lubrifiant\13_2022_01_10_135525_120%_100%_L.xlsx"
+acier_usure_120_100 = "Experimentations/39_2022_01_12_132408_120%_100%_L_US.xlsx"
+acier_simp_120_100 = "Experimentations/13_2022_01_10_135525_120%_100%_L.xlsx"
 
 
 
@@ -183,7 +182,7 @@ def car(df, w_size):
     for i in range(0, len(df), w_size):
         df_car = {}
         groupe = df.iloc[i:i+w_size]
-        #df_stat = stat(groupe) # Calcul des stats (median, std, min, max)
+        df_stat = stat(groupe) # Calcul des stats (median, std, min, max)
         ## Energy ratio
         # Calcul de la transformée de fourier
         fft_table = fft(groupe['acc_table'].tolist())
@@ -231,10 +230,10 @@ def car(df, w_size):
         j+=1
         #display(df_car)
         df_new = pd.concat([df_new, df_car], axis=0)
-        #df_stats = pd.concat([df_stats, df_stat], axis=0)
-        #df_stats = df_stats.reset_index(drop=True)
-    #X = pd.concat([df_new, df_stats], axis=1)
-    return df_new
+        df_stats = pd.concat([df_stats, df_stat], axis=0)
+        df_stats = df_stats.reset_index(drop=True)
+    X = pd.concat([df_new, df_stats], axis=1)
+    return X
 
 
 def create_train_test(train, w_size):
@@ -316,7 +315,7 @@ class Model():
 #Modele de machine learning simple
 knn_model = KNeighborsClassifier()
 rdf_model = RandomForestClassifier()
-logr_model = LogisticRegression()
+lgr_model = LogisticRegression()
 xgb_model = XGBClassifier()
 mlp_model = MLPClassifier()
 
@@ -332,8 +331,8 @@ rdf_grid = {
     'max_features' : ["sqrt", "log2", None]
 }
 
-logr_grid = {
-    'penalty':['l1', 'l2', 'elasticnet', None],
+lgr_grid = {
+    'penalty':['l1', 'l2', 'elasticnet'],
     'solver': ['liblinear', 'saga'],
     'C': [0.1, 1, 10]
 }
@@ -354,22 +353,31 @@ mlp_grid = {
 
 gs_knn = GridSearchCV(knn_model, knn_grid, cv=5)
 gs_rdf = GridSearchCV(rdf_model, rdf_grid, cv=5)
-gs_logr = GridSearchCV(logr_model, logr_grid, cv=5)
-gs_xgb = GridSearchCV(logr_model, logr_grid, cv=5)
+gs_lgr = GridSearchCV(lgr_model, lgr_grid, cv=5)
+gs_xgb = GridSearchCV(xgb_model, xgb_grid, cv=5)
 gs_mlp = GridSearchCV(mlp_model, mlp_grid, cv=5)
 
 
 models_train = {
     "knn": gs_knn,
     "rdf": gs_rdf,
-    "logr": gs_logr,
+    "lgr": gs_logr,
     "xgb":gs_xgb,
     "mlp":gs_mlp
 }
 
+models = {
+    
+    "knn": KNeighborsClassifier,
+    "rdf": RandomForestClassifier,
+    "lgr": LogisticRegression,
+    "xgb": XGBClassifier,
+    "mlp": MLPClassifier
+}
 
 
-w_sizes = [50, 100, 200, 500, 700, 1000, 1200, 1500, 1700, 2000]
+
+w_sizes = [2000]
 
 resl = {}
 for w_size in w_sizes: 
@@ -384,17 +392,10 @@ for w_size in w_sizes:
     X_test, y_test = create_train_test(test, w_size) 
     for n, m in models_train.items():
         m.fit(X_train, y_train)
-        print(f'best params : {m.best_params_}')
-        if n == "knn":
-            m = KNeighborsClassifier(n_neighbors = m.best_params_["n_neighbors"], p = m.best_params_["p"], weights = m.best_params_["weights"])
-        elif n == "rdf":
-            m = RandomForestClassifier(n_estimators = m.best_params_["n_estimators"], max_features = m.best_params_["max_features"])
-        elif n == "logr":
-            m = LogisticRegression(penalty = m.best_params_["penalty"], solver = m.best_params_["solver"], C = m.best_params_["C"])
-        elif n == "xgb":
-            m  = XGBClassifier(learning_rate = m.best_params_["learning_rate"], max_depth = m.best_params_["max_depth"],n_estimators = m.best_params_["n_estimators"])
-        elif n == "mlp":
-            m = MLPClassifier(hidden_layer_sizes=m.best_params_["hidden_layer_sizes"], activation = m.best_params_["activation"], solver = m.best_params_["solver"], random_state = 42)
+        print(f" Best Params for {n} = {m.best_params_}")
+        for i, j in models.items():
+            if i == n:
+                m = j(**m.best_params_)
         model = Model(X_train, X_test, y_train, y_test, n, m)
         scores = model.run()
         accuracy.append(scores["accuracy"])
@@ -446,7 +447,7 @@ for i in range(len(names)):
 
 
 
-
+LogisticRegression().get_params().keys()
 
 
 
